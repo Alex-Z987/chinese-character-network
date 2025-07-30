@@ -1,78 +1,449 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Chinese Character Network</title>
-  <script src="https://d3js.org/d3.v7.min.js"></script>
-  <style>
-    circle { cursor: pointer; }
-    .label { font-family: sans-serif; font-size: 12px; pointer-events: none; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Chinese Character Network</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(45deg, #2c3e50, #3498db);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 2rem;
+            font-weight: 300;
+        }
+        
+        .controls {
+            padding: 20px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        
+        .info-panel {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 10px;
+            padding: 10px 15px;
+            font-size: 14px;
+            color: #856404;
+        }
+        
+        #network {
+            width: 100%;
+            height: 600px;
+            border-top: 1px solid #e9ecef;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .node {
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .node:hover {
+            stroke-width: 3px;
+            filter: drop-shadow(0 0 10px rgba(0,0,0,0.3));
+        }
+        
+        .node-text {
+            font-family: 'Microsoft YaHei', '微软雅黑', Arial, sans-serif;
+            font-size: 18px;
+            font-weight: bold;
+            text-anchor: middle;
+            dominant-baseline: central;
+            pointer-events: none;
+            fill: white;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+        }
+        
+        .link {
+            stroke: #999;
+            stroke-opacity: 0.6;
+            stroke-width: 2px;
+        }
+        
+        .mst-link {
+            stroke: #2980b9;
+            stroke-width: 3px;
+            stroke-opacity: 0.8;
+        }
+        
+        .breadcrumb {
+            padding: 15px 20px;
+            background: #e3f2fd;
+            border-bottom: 1px solid #bbdefb;
+            font-size: 14px;
+            color: #1565c0;
+        }
+        
+        .breadcrumb span {
+            margin-right: 10px;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 15px;
+            transition: background 0.3s ease;
+        }
+        
+        .breadcrumb span:hover {
+            background: #bbdefb;
+        }
+        
+        .zoom-controls {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        
+        .zoom-btn {
+            width: 40px;
+            height: 40px;
+            border: none;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.9);
+            cursor: pointer;
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .zoom-btn:hover {
+            background: white;
+            transform: scale(1.1);
+        }
+    </style>
 </head>
 <body>
-  <svg width="800" height="600"></svg>
-  <script>
-    const data = {
-      nodes: [
-        {id: "口", degree: 180},
-        {id: "言", degree: 80},
-        {id: "喝", degree: 20},
-        {id: "叫", degree: 10}
-      ],
-      links: [
-        {source: "口", target: "言"},
-        {source: "口", target: "喝"},
-        {source: "口", target: "叫"}
-      ]
-    };
+    <div class="container">
+        <div class="header">
+            <h1>Interactive Chinese Character Network</h1>
+            <p>Based on "Efficient Learning Strategy of Chinese Characters Based on Network Approach"</p>
+        </div>
+        
+        <div class="controls">
+            <button class="btn" onclick="resetView()">🏠 Reset View</button>
+            <button class="btn" onclick="toggleMST()">🌳 Toggle MST</button>
+            <button class="btn" onclick="randomLayout()">🎲 Random Layout</button>
+            <div class="info-panel">
+                <strong>Instructions:</strong> Click on any character to zoom in and explore its sub-network. Drag to pan, scroll to zoom.
+            </div>
+        </div>
+        
+        <div class="breadcrumb" id="breadcrumb">
+            <span onclick="navigateToLevel(0)">🏠 Root Network</span>
+        </div>
+        
+        <div id="network">
+            <div class="zoom-controls">
+                <button class="zoom-btn" onclick="zoomIn()">+</button>
+                <button class="zoom-btn" onclick="zoomOut()">−</button>
+            </div>
+        </div>
+    </div>
 
-    const svg = d3.select("svg"),
-          width = +svg.attr("width"),
-          height = +svg.attr("height");
+    <script>
+        // Sample data structure representing Chinese character relationships
+        const sampleData = {
+            nodes: [
+                {id: "手", level: 0, meaning: "hand", frequency: 100, children: ["打", "拿", "持", "握"]},
+                {id: "水", level: 0, meaning: "water", frequency: 95, children: ["河", "海", "湖", "泉"]},
+                {id: "木", level: 0, meaning: "wood/tree", frequency: 90, children: ["林", "森", "树", "枝"]},
+                {id: "口", level: 0, meaning: "mouth", frequency: 85, children: ["吃", "喝", "说", "唱"]},
+                {id: "人", level: 0, meaning: "person", frequency: 80, children: ["大", "小", "男", "女"]},
+                {id: "心", level: 0, meaning: "heart", frequency: 75, children: ["想", "爱", "恨", "忘"]},
+                {id: "月", level: 0, meaning: "moon", frequency: 70, children: ["明", "夜", "晚", "暗"]},
+                {id: "火", level: 0, meaning: "fire", frequency: 65, children: ["燃", "烧", "热", "光"]},
+                // Sub-characters for 手
+                {id: "打", level: 1, parent: "手", meaning: "to hit", frequency: 40},
+                {id: "拿", level: 1, parent: "手", meaning: "to take", frequency: 35},
+                {id: "持", level: 1, parent: "手", meaning: "to hold", frequency: 30},
+                {id: "握", level: 1, parent: "手", meaning: "to grasp", frequency: 25},
+                // Sub-characters for 水
+                {id: "河", level: 1, parent: "水", meaning: "river", frequency: 45},
+                {id: "海", level: 1, parent: "水", meaning: "sea", frequency: 50},
+                {id: "湖", level: 1, parent: "水", meaning: "lake", frequency: 35},
+                {id: "泉", level: 1, parent: "水", meaning: "spring", frequency: 25}
+            ],
+            links: [
+                {source: "手", target: "打", type: "mst"},
+                {source: "手", target: "拿", type: "mst"},
+                {source: "手", target: "持", type: "other"},
+                {source: "手", target: "握", type: "other"},
+                {source: "水", target: "河", type: "mst"},
+                {source: "水", target: "海", type: "mst"},
+                {source: "水", target: "湖", type: "other"},
+                {source: "水", target: "泉", type: "other"},
+                {source: "水", target: "木", type: "other"},
+                {source: "手", target: "口", type: "other"},
+                {source: "人", target: "心", type: "mst"},
+                {source: "月", target: "火", type: "other"}
+            ]
+        };
 
-    const colorScale = d3.scaleSequential(d3.interpolateYlOrRd)
-                         .domain([0, 180]);
+        // Global variables
+        let currentLevel = 0;
+        let currentParent = null;
+        let showMST = true;
+        let svg, g, simulation, zoom;
+        let nodes, links;
 
-    const simulation = d3.forceSimulation(data.nodes)
-      .force("link", d3.forceLink(data.links).id(d => d.id).distance(100))
-      .force("charge", d3.forceManyBody().strength(-300))
-      .force("center", d3.forceCenter(width / 2, height / 2));
+        // Color scheme
+        const colors = d3.scaleOrdinal()
+            .domain([0, 1, 2])
+            .range(["#e74c3c", "#f39c12", "#27ae60"]);
 
-    const link = svg.append("g")
-        .selectAll("line")
-        .data(data.links)
-        .join("line")
-        .attr("stroke", "#aaa");
+        // Initialize the visualization
+        function initNetwork() {
+            const container = d3.select("#network");
+            const width = container.node().getBoundingClientRect().width;
+            const height = 600;
 
-    const node = svg.append("g")
-        .selectAll("circle")
-        .data(data.nodes)
-        .join("circle")
-        .attr("r", 20)
-        .attr("fill", d => colorScale(d.degree))
-        .on("click", (event, d) => {
-          alert(`Clicked on character: ${d.id}`);
+            svg = container.append("svg")
+                .attr("width", width)
+                .attr("height", height);
+
+            // Define zoom behavior
+            zoom = d3.zoom()
+                .scaleExtent([0.1, 4])
+                .on("zoom", (event) => {
+                    g.attr("transform", event.transform);
+                });
+
+            svg.call(zoom);
+
+            g = svg.append("g");
+
+            // Initialize simulation
+            simulation = d3.forceSimulation()
+                .force("link", d3.forceLink().id(d => d.id).distance(100))
+                .force("charge", d3.forceManyBody().strength(-300))
+                .force("center", d3.forceCenter(width / 2, height / 2))
+                .force("collision", d3.forceCollide().radius(40));
+
+            updateVisualization();
+        }
+
+        function updateVisualization() {
+            // Filter data based on current level
+            if (currentLevel === 0) {
+                nodes = sampleData.nodes.filter(d => d.level === 0);
+                links = sampleData.links.filter(d => 
+                    nodes.find(n => n.id === d.source) && nodes.find(n => n.id === d.target)
+                );
+            } else {
+                nodes = sampleData.nodes.filter(d => 
+                    d.level === 0 && d.id === currentParent || 
+                    d.level === 1 && d.parent === currentParent
+                );
+                links = sampleData.links.filter(d => 
+                    d.source === currentParent || d.target === currentParent
+                );
+            }
+
+            // Filter links based on MST toggle
+            const filteredLinks = showMST ? links : links.filter(d => d.type === "mst");
+
+            // Clear existing elements
+            g.selectAll(".link").remove();
+            g.selectAll(".node").remove();
+
+            // Create links
+            const linkSelection = g.selectAll(".link")
+                .data(filteredLinks)
+                .enter().append("line")
+                .attr("class", d => d.type === "mst" ? "link mst-link" : "link");
+
+            // Create nodes
+            const nodeSelection = g.selectAll(".node")
+                .data(nodes)
+                .enter().append("g")
+                .attr("class", "node")
+                .call(d3.drag()
+                    .on("start", dragstarted)
+                    .on("drag", dragged)
+                    .on("end", dragended))
+                .on("click", handleNodeClick);
+
+            // Add circles to nodes
+            nodeSelection.append("circle")
+                .attr("r", d => Math.sqrt(d.frequency) * 2 + 10)
+                .attr("fill", d => colors(d.level))
+                .attr("stroke", "#fff")
+                .attr("stroke-width", 2);
+
+            // Add text to nodes
+            nodeSelection.append("text")
+                .attr("class", "node-text")
+                .text(d => d.id);
+
+            // Add tooltips
+            nodeSelection.append("title")
+                .text(d => `${d.id} (${d.meaning})\nFrequency: ${d.frequency}`);
+
+            // Update simulation
+            simulation.nodes(nodes);
+            simulation.force("link").links(filteredLinks);
+            simulation.alpha(1).restart();
+
+            simulation.on("tick", () => {
+                linkSelection
+                    .attr("x1", d => d.source.x)
+                    .attr("y1", d => d.source.y)
+                    .attr("x2", d => d.target.x)
+                    .attr("y2", d => d.target.y);
+
+                nodeSelection
+                    .attr("transform", d => `translate(${d.x},${d.y})`);
+            });
+        }
+
+        function handleNodeClick(event, d) {
+            event.stopPropagation();
+            
+            if (d.level === 0 && d.children) {
+                // Zoom into character's sub-network
+                currentLevel = 1;
+                currentParent = d.id;
+                updateBreadcrumb();
+                updateVisualization();
+                
+                // Smooth zoom transition
+                const t = d3.zoomIdentity.translate(200, 200).scale(1.5);
+                svg.transition().duration(750).call(zoom.transform, t);
+            }
+        }
+
+        function updateBreadcrumb() {
+            const breadcrumb = d3.select("#breadcrumb");
+            
+            if (currentLevel === 0) {
+                breadcrumb.html('<span onclick="navigateToLevel(0)">🏠 Root Network</span>');
+            } else {
+                breadcrumb.html(`
+                    <span onclick="navigateToLevel(0)">🏠 Root Network</span>
+                    <span>›</span>
+                    <span>${currentParent} Sub-network</span>
+                `);
+            }
+        }
+
+        function navigateToLevel(level) {
+            currentLevel = level;
+            currentParent = null;
+            updateBreadcrumb();
+            updateVisualization();
+        }
+
+        function resetView() {
+            currentLevel = 0;
+            currentParent = null;
+            updateBreadcrumb();
+            updateVisualization();
+            
+            const t = d3.zoomIdentity;
+            svg.transition().duration(750).call(zoom.transform, t);
+        }
+
+        function toggleMST() {
+            showMST = !showMST;
+            updateVisualization();
+        }
+
+        function randomLayout() {
+            nodes.forEach(d => {
+                d.x += (Math.random() - 0.5) * 100;
+                d.y += (Math.random() - 0.5) * 100;
+            });
+            simulation.alpha(1).restart();
+        }
+
+        function zoomIn() {
+            svg.transition().call(zoom.scaleBy, 1.5);
+        }
+
+        function zoomOut() {
+            svg.transition().call(zoom.scaleBy, 1 / 1.5);
+        }
+
+        // Drag functions
+        function dragstarted(event, d) {
+            if (!event.active) simulation.alphaTarget(0.3).restart();
+            d.fx = d.x;
+            d.fy = d.y;
+        }
+
+        function dragged(event, d) {
+            d.fx = event.x;
+            d.fy = event.y;
+        }
+
+        function dragended(event, d) {
+            if (!event.active) simulation.alphaTarget(0);
+            d.fx = null;
+            d.fy = null;
+        }
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', initNetwork);
+        
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            const container = d3.select("#network");
+            const width = container.node().getBoundingClientRect().width;
+            svg.attr("width", width);
+            simulation.force("center", d3.forceCenter(width / 2, 300));
+            simulation.alpha(1).restart();
         });
-
-    const label = svg.append("g")
-        .selectAll("text")
-        .data(data.nodes)
-        .join("text")
-        .attr("class", "label")
-        .text(d => d.id);
-
-    simulation.on("tick", () => {
-      link.attr("x1", d => d.source.x)
-          .attr("y1", d => d.source.y)
-          .attr("x2", d => d.target.x)
-          .attr("y2", d => d.target.y);
-
-      node.attr("cx", d => d.x)
-          .attr("cy", d => d.y);
-
-      label.attr("x", d => d.x)
-           .attr("y", d => d.y + 4);
-    });
-  </script>
+    </script>
 </body>
 </html>
